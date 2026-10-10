@@ -5,7 +5,7 @@ export const Route = createFileRoute("/")({
   component: LoginPage,
 });
 
-const ADMIN_PIN = "123456"; // 6-digit admin pin to change details
+const ADMIN_PIN = "446612"; // 6-digit admin pin to change details
 
 function LoginPage() {
   const navigate = useNavigate();
