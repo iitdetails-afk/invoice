@@ -850,7 +850,7 @@ function QuotationPage() {
                 value={signature}
                 onChange={setSignature}
                 label="Upload signature"
-                className="h-16 w-32 shrink-0 object-contain"
+                className="h-16 print:h-12 w-32 print:w-28 shrink-0 object-contain"
               />
               <div className="mt-2 flex items-center justify-between border-t border-ink/40 pt-1 font-mono text-[10px] uppercase tracking-wider text-ink/80 min-w-[200px]">
                 <span>Authorised Signatory for {seller.name || "—"}</span>
