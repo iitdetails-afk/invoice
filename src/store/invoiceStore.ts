@@ -66,6 +66,7 @@ export interface InvoiceData {
 
 export interface InvoiceState extends InvoiceData {
   savedInvoices: InvoiceData[];
+  isHydrated: boolean;
   setField: <K extends keyof InvoiceData>(field: K, value: InvoiceData[K]) => void;
   setNestedField: <P extends "seller" | "buyer" | "bank", K extends keyof InvoiceData[P]>(
     parent: P,
@@ -94,7 +95,7 @@ const getDefaultData = (savedInvoices: InvoiceData[] = []): InvoiceData => ({
   buyer: defaultBuyer,
   shipTo: "",
   bank: defaultBank,
-  logo: "/logo.png",
+  logo: "/logo-bg-removed.png",
   seal: "",
   signature: "",
   terms: defaultTerms,
@@ -108,11 +109,102 @@ const getDefaultData = (savedInvoices: InvoiceData[] = []): InvoiceData => ({
   packingCharge: 0,
 });
 
+const getSafeStorage = () => ({
+  getItem: async (name: string): Promise<string | null> => {
+    if (typeof window === "undefined") return null;
+
+    try {
+      // 1. Try IndexedDB
+      const idbVal = await getIDB(name);
+      if (idbVal !== undefined && idbVal !== null) {
+        return typeof idbVal === "string" ? idbVal : JSON.stringify(idbVal);
+      }
+
+      // 2. Fallback to localStorage and migrate to IDB
+      try {
+        const local = localStorage.getItem(name);
+        if (local) {
+          setIDB(name, local).catch(() => {});
+          return local;
+        }
+
+        // 3. Fallback to older storage keys (v1)
+        const v1 = localStorage.getItem("invoice-storage");
+        if (v1) {
+          setIDB(name, v1).catch(() => {});
+          return v1;
+        }
+      } catch (e) {
+        console.warn("localStorage read error", e);
+      }
+    } catch (err) {
+      console.warn("IndexedDB read error, trying fallback", err);
+      try {
+        return localStorage.getItem(name) || localStorage.getItem("invoice-storage") || null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  },
+
+  setItem: async (name: string, value: string): Promise<void> => {
+    if (typeof window === "undefined") return;
+
+    let idbOk = false;
+    try {
+      await setIDB(name, value);
+      idbOk = true;
+    } catch (err) {
+      console.warn("setIDB error", err);
+    }
+
+    // Backup to localStorage
+    try {
+      localStorage.setItem(name, value);
+    } catch (e: unknown) {
+      const err = e as { name?: string; code?: number };
+      // Handle QuotaExceededError without crashing the application
+      if (err?.name === "QuotaExceededError" || err?.code === 22) {
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed?.state?.savedInvoices && Array.isArray(parsed.state.savedInvoices)) {
+            // Strip heavy base64 strings from historical items for the localStorage backup
+            parsed.state.savedInvoices = parsed.state.savedInvoices.map((inv: InvoiceData) => ({
+              ...inv,
+              logo: "",
+              seal: "",
+              signature: "",
+            }));
+            localStorage.setItem(name, JSON.stringify(parsed));
+          }
+        } catch {
+          if (!idbOk) {
+            console.error("Storage quota exceeded and IndexedDB unavailable", e);
+          }
+        }
+      }
+    }
+  },
+
+  removeItem: async (name: string): Promise<void> => {
+    if (typeof window === "undefined") return;
+    try {
+      await delIDB(name);
+    } catch {}
+    try {
+      localStorage.removeItem(name);
+      localStorage.removeItem("invoice-storage");
+    } catch {}
+  },
+});
+
 export const useInvoiceStore = create<InvoiceState>()(
   persist(
     (set, get) => ({
       ...getDefaultData(),
       savedInvoices: [],
+      isHydrated: false,
 
       setField: (field, value) => set({ [field]: value }),
       setNestedField: (parent, field, value) =>
@@ -133,19 +225,19 @@ export const useInvoiceStore = create<InvoiceState>()(
         const currentData: InvoiceData = {
           docType: state.docType,
           salesType: state.salesType,
-          invoiceNo: state.invoiceNo,
-          invoiceDate: state.invoiceDate,
+          invoiceNo: state.invoiceNo || generateInvoiceNumber(state.savedInvoices),
+          invoiceDate: state.invoiceDate || today(),
           dueDate: state.dueDate,
           placeOfSupply: state.placeOfSupply,
-          seller: state.seller,
-          buyer: state.buyer,
+          seller: { ...state.seller },
+          buyer: { ...state.buyer },
           shipTo: state.shipTo,
-          bank: state.bank,
+          bank: { ...state.bank },
           logo: state.logo,
           seal: state.seal,
           signature: state.signature,
           terms: state.terms,
-          items: state.items,
+          items: (state.items || []).map((it) => ({ ...it })),
           discountValue: state.discountValue,
           discountIsPercent: state.discountIsPercent,
           gstRate: state.gstRate,
@@ -156,35 +248,66 @@ export const useInvoiceStore = create<InvoiceState>()(
         };
 
         set((prev) => {
-          const existingIdx = prev.savedInvoices.findIndex(
-            (inv) => inv.invoiceNo === currentData.invoiceNo,
+          const prevSaved = Array.isArray(prev.savedInvoices) ? prev.savedInvoices : [];
+          const existingIdx = prevSaved.findIndex(
+            (inv) => inv && inv.invoiceNo === currentData.invoiceNo,
           );
           if (existingIdx >= 0) {
-            const newSaved = [...prev.savedInvoices];
+            const newSaved = [...prevSaved];
             newSaved[existingIdx] = currentData;
             return { savedInvoices: newSaved };
           } else {
-            return { savedInvoices: [currentData, ...prev.savedInvoices] };
+            return { savedInvoices: [currentData, ...prevSaved] };
           }
         });
       },
 
       loadInvoice: (invoiceNo: string) => {
         const state = get();
-        const found = state.savedInvoices.find((inv) => inv.invoiceNo === invoiceNo);
+        const prevSaved = Array.isArray(state.savedInvoices) ? state.savedInvoices : [];
+        const found = prevSaved.find((inv) => inv && inv.invoiceNo === invoiceNo);
         if (found) {
-          set({ ...found });
+          set({
+            ...found,
+            seller: { ...defaultSeller, ...(found.seller || {}) },
+            buyer: { ...defaultBuyer, ...(found.buyer || {}) },
+            bank: { ...defaultBank, ...(found.bank || {}) },
+            logo: found.logo || state.logo || "/logo.png",
+            seal: found.seal || state.seal || "",
+            signature: found.signature || state.signature || "",
+            items: (found.items || []).map((it) => ({
+              id: it.id || uid(),
+              description: it.description || "",
+              hsn: it.hsn || "",
+              qty: typeof it.qty === "number" ? it.qty : 1,
+              rate: typeof it.rate === "number" ? it.rate : 0,
+            })),
+          });
         }
       },
 
       resetForm: () => {
-        const currentLogo = get().logo;
-        set({ ...getDefaultData(get().savedInvoices), logo: currentLogo });
+        const state = get();
+        const currentLogo = state.logo;
+        const currentSeal = state.seal;
+        const currentSig = state.signature;
+        const currentSeller = state.seller;
+        const currentBank = state.bank;
+        set({
+          ...getDefaultData(state.savedInvoices),
+          seller: currentSeller,
+          bank: currentBank,
+          logo: currentLogo,
+          seal: currentSeal,
+          signature: currentSig,
+        });
       },
 
       deleteInvoice: (invoiceNo: string) => {
         set((prev) => ({
-          savedInvoices: prev.savedInvoices.filter((inv) => inv.invoiceNo !== invoiceNo),
+          savedInvoices: (Array.isArray(prev.savedInvoices) ? prev.savedInvoices : []).filter(
+            (inv) => inv && inv.invoiceNo !== invoiceNo,
+          ),
         }));
       },
 
@@ -241,41 +364,46 @@ export const useInvoiceStore = create<InvoiceState>()(
     }),
     {
       name: "invoice-storage-v2",
-      storage: createJSONStorage(() => ({
-        getItem: async (name) => {
-          const value = await getIDB(name);
-          if (value === undefined) {
-            const local = localStorage.getItem(name);
-            if (local) return local;
-          }
-          return value || null;
-        },
-        setItem: async (name, value) => {
-          await setIDB(name, value);
-        },
-        removeItem: async (name) => {
-          await delIDB(name);
-        },
-      })),
+      storage: createJSONStorage(getSafeStorage),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn("Hydration failed", error);
+        }
+        useInvoiceStore.setState({ isHydrated: true });
+      },
       merge: (persistedState: unknown, currentState: InvoiceState) => {
-        if (!persistedState || typeof persistedState !== "object") return currentState;
+        if (!persistedState || typeof persistedState !== "object") {
+          return { ...currentState, isHydrated: true };
+        }
         const pState = persistedState as Partial<InvoiceState>;
+        const rawSaved = Array.isArray(pState.savedInvoices) ? pState.savedInvoices : [];
+        const validSaved = rawSaved.filter((inv): inv is InvoiceData => Boolean(inv && inv.invoiceNo));
+
         return {
           ...currentState,
           ...pState,
+          isHydrated: true,
+          savedInvoices: validSaved,
           seller: { ...currentState.seller, ...(pState.seller || {}) },
           buyer: { ...currentState.buyer, ...(pState.buyer || {}) },
-          bank: { ...currentState.bank, ...(pState.bank || {}) },
-          items: pState.items
-            ? pState.items.map((i: Partial<LineItem>) => ({
-                id: uid(),
-                description: "",
-                hsn: "",
-                qty: 1,
-                rate: 0,
-                ...i,
-              }))
-            : currentState.items,
+          bank: {
+            ...currentState.bank,
+            ...(pState.bank || {}),
+            upi:
+              !pState.bank?.upi || pState.bank?.upi === "9003446612"
+                ? "indianinfotech@idfcbank"
+                : pState.bank.upi,
+          },
+          items:
+            Array.isArray(pState.items) && pState.items.length > 0
+              ? pState.items.map((i: Partial<LineItem>) => ({
+                  id: i.id || uid(),
+                  description: i.description || "",
+                  hsn: i.hsn || "",
+                  qty: typeof i.qty === "number" ? i.qty : 1,
+                  rate: typeof i.rate === "number" ? i.rate : 0,
+                }))
+              : currentState.items,
         };
       },
     },

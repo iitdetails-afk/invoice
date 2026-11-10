@@ -77,7 +77,7 @@ export const defaultBank: Bank = {
   ifsc: "IDFB0080792",
   bankName: "IDFC Bank",
   branch: "",
-  upi: "9003446612",
+  upi: "indianinfotech@idfcbank",
 };
 
 export const defaultTerms =
@@ -237,11 +237,25 @@ export function computeTotals(opts: {
   };
 }
 
-export function upiLink(bank: Bank, seller: Party, amount: number) {
+export const IDFC_MERCHANT_UPI_BASE =
+  "upi://pay?ver=01&mode=01&orgid=180071&pa=indianinfotech@idfcbank&pn=INDIAN%20INFO%20TECH&mc=5945&mid=MID10280450828&mtid=TID10280450828A&qrMedium=04";
+
+export function upiLink(bank: Bank, seller: Party, amount: number, includeAmount = true) {
   const pa = bank.upi.trim();
   if (!pa) return "";
+
+  if (pa.toLowerCase() === "indianinfotech@idfcbank") {
+    if (includeAmount && amount > 0) {
+      return `${IDFC_MERCHANT_UPI_BASE}&am=${amount.toFixed(2)}&cu=INR`;
+    }
+    return IDFC_MERCHANT_UPI_BASE;
+  }
+
   const pn = encodeURIComponent(seller.name || bank.accountName || "Merchant");
-  return `upi://pay?pa=${encodeURIComponent(pa)}&pn=${pn}&am=${amount.toFixed(2)}&cu=INR`;
+  if (includeAmount && amount > 0) {
+    return `upi://pay?pa=${encodeURIComponent(pa)}&pn=${pn}&am=${amount.toFixed(2)}&cu=INR`;
+  }
+  return `upi://pay?pa=${encodeURIComponent(pa)}&pn=${pn}&cu=INR`;
 }
 
 export const PROFILE_KEY = "meridian-gst-seller-profile-v2";

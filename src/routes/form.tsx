@@ -22,7 +22,7 @@ function FormPage() {
         packingCharge: store.packingCharge || 0,
         discountValue: store.discountValue,
         discountIsPercent: store.discountIsPercent,
-        gstRate: store.gstRate,
+        gstRate: store.docType === "Tax Invoice" ? store.gstRate : 0,
         gstInclusive: store.gstInclusive,
         taxMode: store.taxMode,
         roundOffEnabled: store.roundOffEnabled,
@@ -106,41 +106,42 @@ function FormPage() {
   };
 
   const handleExportAllExcel = () => {
-    if (!store.savedInvoices || store.savedInvoices.length === 0) {
+    const list = Array.isArray(store.savedInvoices) ? store.savedInvoices : [];
+    if (list.length === 0) {
       alert("No invoices to export!");
       return;
     }
 
     const header =
-      "Doc Type,Invoice No,Date,Sales Type,Buyer Name,Buyer GSTIN,Buyer Phone,Seller Name,Subtotal,Discount,Tax,Grand Total\n";
+      "Doc Type,Invoice No,Date,Sales Type,Buyer Name,Buyer GSTIN,Buyer Phone/Mobile,Seller Name,Subtotal,Discount,Tax,Grand Total\n";
 
-    const rows = store.savedInvoices
+    const rows = list
       .map((inv) => {
         const isTaxDoc = inv.docType === "Tax Invoice";
-        const effectiveGst = isTaxDoc ? inv.gstRate : 0;
+        const effectiveGst = isTaxDoc ? (inv.gstRate || 0) : 0;
 
         const totals = computeTotals({
-          items: inv.items,
+          items: Array.isArray(inv.items) ? inv.items : [],
           packingCharge: inv.packingCharge || 0,
-          discountValue: inv.discountValue,
-          discountIsPercent: inv.discountIsPercent,
+          discountValue: inv.discountValue || 0,
+          discountIsPercent: inv.discountIsPercent ?? true,
           gstRate: effectiveGst,
           gstInclusive: inv.gstInclusive || false,
-          taxMode: inv.taxMode,
-          roundOffEnabled: inv.roundOffEnabled,
+          taxMode: inv.taxMode || "intra",
+          roundOffEnabled: inv.roundOffEnabled ?? true,
         });
 
-        const taxAmount = inv.taxMode === "intra" ? totals.cgst + totals.sgst : totals.igst;
+        const taxAmount = (inv.taxMode || "intra") === "intra" ? totals.cgst + totals.sgst : totals.igst;
 
         return [
           `"${inv.docType || ""}"`,
           `"${inv.invoiceNo || ""}"`,
           `"${inv.invoiceDate || ""}"`,
           `"${inv.salesType || ""}"`,
-          `"${inv.buyer.name || ""}"`,
-          `"${inv.buyer.gstin || ""}"`,
-          `"${inv.buyer.mobile || ""}"`,
-          `"${inv.seller.name || ""}"`,
+          `"${inv.buyer?.name || ""}"`,
+          `"${inv.buyer?.gstin || ""}"`,
+          `"${inv.buyer?.mobile || inv.buyer?.phone || ""}"`,
+          `"${inv.seller?.name || ""}"`,
           totals.subtotal.toFixed(2),
           totals.discount.toFixed(2),
           taxAmount.toFixed(2),
@@ -377,9 +378,9 @@ function FormPage() {
 
           <div className="space-y-4 sm:col-span-2 border-t border-rule pt-4 mt-2">
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-accent">
-              Bank Details
+              Bank &amp; UPI Details
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div>
                 <label className="block text-[10px] uppercase text-inksoft mb-1">
                   Account Name
@@ -420,17 +421,33 @@ function FormPage() {
                   onChange={(e) => store.setNestedField("bank", "ifsc", e.target.value)}
                 />
               </div>
+              <div>
+                <label className="block text-[10px] uppercase text-inksoft mb-1">UPI ID</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 text-sm bg-white/40 border border-rule rounded-[6px] focus:outline-none focus:border-accent text-accent font-semibold"
+                  value={store.bank.upi}
+                  placeholder="indianinfotech@idfcbank"
+                  onChange={(e) => store.setNestedField("bank", "upi", e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
           {/* Additional details like Invoice No, Date, etc */}
           <div className="space-y-4 sm:col-span-2 border-t border-rule pt-4 mt-2">
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-accent">
-              Invoice Options
+              {store.docType} Options
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
-                <label className="block text-[10px] uppercase text-inksoft mb-1">Invoice No.</label>
+                <label className="block text-[10px] uppercase text-inksoft mb-1">
+                  {store.docType === "Bill of Supply"
+                    ? "Bill of Supply No."
+                    : store.docType === "Cash Memo"
+                      ? "Cash Memo No."
+                      : "Invoice No."}
+                </label>
                 <input
                   type="text"
                   className="w-full px-3 py-2 text-sm bg-white/40 border border-rule rounded-[6px] focus:outline-none focus:border-accent"
@@ -440,7 +457,11 @@ function FormPage() {
               </div>
               <div>
                 <label className="block text-[10px] uppercase text-inksoft mb-1">
-                  Invoice Date
+                  {store.docType === "Bill of Supply"
+                    ? "Bill of Supply Date"
+                    : store.docType === "Cash Memo"
+                      ? "Cash Memo Date"
+                      : "Invoice Date"}
                 </label>
                 <input
                   type="date"
@@ -450,11 +471,32 @@ function FormPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase text-inksoft mb-1">Due Date</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] uppercase text-inksoft">
+                    Due Date
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      store.setField(
+                        "dueDate",
+                        store.dueDate ? "" : store.invoiceDate || new Date().toISOString().slice(0, 10),
+                      )
+                    }
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border transition-colors cursor-pointer ${
+                      store.dueDate
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                        : "bg-ink/5 text-inksoft border-rule hover:text-ink"
+                    }`}
+                  >
+                    Print: {store.dueDate ? "ON" : "OFF"}
+                  </button>
+                </div>
                 <input
                   type="date"
                   className="w-full px-3 py-2 text-sm bg-white/40 border border-rule rounded-[6px] focus:outline-none focus:border-accent"
                   value={store.dueDate}
+                  placeholder="Optional"
                   onChange={(e) => store.setField("dueDate", e.target.value)}
                 />
               </div>
@@ -469,17 +511,19 @@ function FormPage() {
                   onChange={(e) => store.setField("placeOfSupply", e.target.value)}
                 />
               </div>
-              <div>
-                <label className="block text-[10px] uppercase text-inksoft mb-1">
-                  GST Rate (%)
-                </label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 text-sm bg-white/40 border border-rule rounded-[6px] focus:outline-none focus:border-accent"
-                  value={store.gstRate}
-                  onChange={(e) => store.setField("gstRate", Number(e.target.value))}
-                />
-              </div>
+              {store.docType === "Tax Invoice" && (
+                <div>
+                  <label className="block text-[10px] uppercase text-inksoft mb-1">
+                    GST Rate (%)
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full px-3 py-2 text-sm bg-white/40 border border-rule rounded-[6px] focus:outline-none focus:border-accent"
+                    value={store.gstRate}
+                    onChange={(e) => store.setField("gstRate", Number(e.target.value))}
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-[10px] uppercase text-inksoft mb-1">Discount</label>
                 <input
@@ -520,7 +564,7 @@ function FormPage() {
               <div className="flex gap-2 items-center px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-inksoft">
                 <span className="w-6 text-center">#</span>
                 <span className="flex-1">Description</span>
-                <span className="w-24">HSN Code</span>
+                {store.docType !== "Bill of Supply" && <span className="w-24">HSN Code</span>}
                 <span className="w-20">Quantity</span>
                 <span className="w-24">Rate</span>
                 <span className="w-8"></span>
@@ -542,13 +586,15 @@ function FormPage() {
                       store.updateItem(item.id, { description: e.target.value });
                     }}
                   />
-                  <input
-                    type="text"
-                    placeholder="HSN/SAC"
-                    className="w-24 px-3 py-1.5 text-sm bg-white/40 border border-rule rounded-[4px]"
-                    value={item.hsn}
-                    onChange={(e) => store.updateItem(item.id, { hsn: e.target.value })}
-                  />
+                  {store.docType !== "Bill of Supply" && (
+                    <input
+                      type="text"
+                      placeholder="HSN/SAC"
+                      className="w-24 px-3 py-1.5 text-sm bg-white/40 border border-rule rounded-[4px]"
+                      value={item.hsn}
+                      onChange={(e) => store.updateItem(item.id, { hsn: e.target.value })}
+                    />
+                  )}
                   <input
                     type="number"
                     placeholder="Qty"

@@ -1,4 +1,4 @@
-﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useInvoiceStore } from "@/store/invoiceStore";
 import { computeTotals } from "@/lib/invoice";
@@ -106,41 +106,42 @@ function QuotationFormPage() {
   };
 
   const handleExportAllExcel = () => {
-    if (!store.savedInvoices || store.savedInvoices.length === 0) {
+    const list = Array.isArray(store.savedInvoices) ? store.savedInvoices : [];
+    if (list.length === 0) {
       alert("No invoices to export!");
       return;
     }
 
     const header =
-      "Doc Type,Invoice No,Date,Sales Type,Buyer Name,Buyer GSTIN,Buyer Phone,Seller Name,Subtotal,Discount,Tax,Grand Total\n";
+      "Doc Type,Invoice No,Date,Sales Type,Buyer Name,Buyer GSTIN,Buyer Phone/Mobile,Seller Name,Subtotal,Discount,Tax,Grand Total\n";
 
-    const rows = store.savedInvoices
+    const rows = list
       .map((inv) => {
         const isTaxDoc = inv.docType === "Tax Invoice";
-        const effectiveGst = isTaxDoc ? inv.gstRate : 0;
+        const effectiveGst = isTaxDoc ? (inv.gstRate || 0) : 0;
 
         const totals = computeTotals({
-          items: inv.items,
+          items: Array.isArray(inv.items) ? inv.items : [],
           packingCharge: inv.packingCharge || 0,
-          discountValue: inv.discountValue,
-          discountIsPercent: inv.discountIsPercent,
+          discountValue: inv.discountValue || 0,
+          discountIsPercent: inv.discountIsPercent ?? true,
           gstRate: effectiveGst,
           gstInclusive: inv.gstInclusive || false,
-          taxMode: inv.taxMode,
-          roundOffEnabled: inv.roundOffEnabled,
+          taxMode: inv.taxMode || "intra",
+          roundOffEnabled: inv.roundOffEnabled ?? true,
         });
 
-        const taxAmount = inv.taxMode === "intra" ? totals.cgst + totals.sgst : totals.igst;
+        const taxAmount = (inv.taxMode || "intra") === "intra" ? totals.cgst + totals.sgst : totals.igst;
 
         return [
           `"${inv.docType || ""}"`,
           `"${inv.invoiceNo || ""}"`,
           `"${inv.invoiceDate || ""}"`,
           `"${inv.salesType || ""}"`,
-          `"${inv.buyer.name || ""}"`,
-          `"${inv.buyer.gstin || ""}"`,
-          `"${inv.buyer.mobile || ""}"`,
-          `"${inv.seller.name || ""}"`,
+          `"${inv.buyer?.name || ""}"`,
+          `"${inv.buyer?.gstin || ""}"`,
+          `"${inv.buyer?.mobile || inv.buyer?.phone || ""}"`,
+          `"${inv.seller?.name || ""}"`,
           totals.subtotal.toFixed(2),
           totals.discount.toFixed(2),
           taxAmount.toFixed(2),
@@ -377,9 +378,9 @@ function QuotationFormPage() {
 
           <div className="space-y-4 sm:col-span-2 border-t border-rule pt-4 mt-2">
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-accent">
-              Bank Details
+              Bank &amp; UPI Details
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div>
                 <label className="block text-[10px] uppercase text-inksoft mb-1">
                   Account Name
@@ -418,6 +419,16 @@ function QuotationFormPage() {
                   className="w-full px-3 py-2 text-sm bg-white/40 border border-rule rounded-[6px] focus:outline-none focus:border-accent"
                   value={store.bank.ifsc}
                   onChange={(e) => store.setNestedField("bank", "ifsc", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase text-inksoft mb-1">UPI ID</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 text-sm bg-white/40 border border-rule rounded-[6px] focus:outline-none focus:border-accent text-accent font-semibold"
+                  value={store.bank.upi}
+                  placeholder="indianinfotech@idfcbank"
+                  onChange={(e) => store.setNestedField("bank", "upi", e.target.value)}
                 />
               </div>
             </div>

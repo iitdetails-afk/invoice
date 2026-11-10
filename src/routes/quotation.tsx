@@ -10,6 +10,7 @@ import {
   formatDate,
   money,
   upiLink,
+  IDFC_MERCHANT_UPI_BASE,
   type Bank,
   type Party,
   type SalesType,
@@ -67,6 +68,7 @@ function QuotationPage() {
 
   const [quotationType, setQuotationType] = useState<string>("Quotation");
   const [errors, setErrors] = useState<string[]>([]);
+  const [qrMode, setQrMode] = useState<"image" | "live">("live");
 
   const setSalesType = (v: SalesType) => store.setField("salesType", v);
   const setInvoiceNo = (v: string) => store.setField("invoiceNo", v);
@@ -134,7 +136,7 @@ function QuotationPage() {
   };
 
   const handlePrint = () => {
-    if (!validate()) return;
+    validate();
     window.print();
   };
 
@@ -231,16 +233,17 @@ function QuotationPage() {
       )}
 
       <main className="px-4 py-8 print:p-0 print:m-0">
-        <article className="sheet mx-auto max-w-[760px] rounded-[10px] bg-paper p-8 shadow-[0_1px_0_rgba(0,0,0,0.04),0_28px_50px_-24px_rgba(24,34,54,0.45)] ring-1 ring-black/5 print:ring-0 print:border-none sm:p-10">
+        <article className="sheet mx-auto w-full max-w-[794px] min-h-[1123px] rounded-[10px] bg-paper p-8 shadow-[0_1px_0_rgba(0,0,0,0.04),0_28px_50px_-24px_rgba(24,34,54,0.45)] ring-1 ring-black/5 print:ring-0 print:border-none print:shadow-none print:p-0 print:m-0 sm:p-10">
           {/* Masthead */}
           <div className="flex items-start justify-between gap-6 border-b-2 border-ink pb-5">
             <div className="flex items-center gap-3">
-              <ImageSlot
-                value={logo}
-                onChange={setLogo}
-                label="Upload logo"
-                className="size-16 shrink-0"
-              />
+              <div className="size-16 shrink-0 flex items-center justify-center overflow-hidden">
+                <img
+                  src="/logo-bg-removed.png"
+                  alt="Company Logo"
+                  className="h-full w-full object-contain mix-blend-multiply"
+                />
+              </div>
               <div className="min-w-0">
                 <Field
                   value={seller.name}
@@ -297,30 +300,44 @@ function QuotationPage() {
               <p className="hidden font-bold print:block">{formatDate(invoiceDate)}</p>
             </div>
             <div className={cn(!dueDate && "print:hidden")}>
-              <p className="text-[10px] uppercase tracking-wider text-inksoft flex items-center gap-1">
-                Valid Until
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] uppercase tracking-wider text-inksoft">Valid Until</span>
                 <button
+                  type="button"
                   onClick={() =>
-                    store.setField("dueDate", dueDate ? "" : new Date().toISOString().slice(0, 10))
+                    store.setField(
+                      "dueDate",
+                      dueDate ? "" : invoiceDate || new Date().toISOString().slice(0, 10),
+                    )
                   }
-                  className="no-print rounded-[4px] bg-ink/5 px-1 text-[10px] opacity-60 hover:opacity-100"
+                  className={cn(
+                    "no-print rounded px-1.5 py-0.5 text-[9px] font-semibold border transition-colors cursor-pointer",
+                    dueDate
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                      : "bg-ink/5 text-inksoft border-rule hover:text-ink",
+                  )}
+                  title={
+                    dueDate
+                      ? "Valid Until date is ON for printing. Click to turn OFF."
+                      : "Valid Until date is OFF for printing. Click to turn ON."
+                  }
                 >
-                  {dueDate ? "hide" : "show"}
+                  Print: {dueDate ? "ON" : "OFF"}
                 </button>
-              </p>
+              </div>
               {dueDate ? (
                 <>
                   <Field
                     type="date"
                     value={dueDate}
                     onChange={setDueDate}
-                    className="font-bold no-print"
+                    className="font-bold no-print mt-0.5"
                   />
                   <p className="hidden font-bold print:block">{formatDate(dueDate || "")}</p>
                 </>
               ) : (
-                <p className="font-bold text-inksoft/40 italic no-print text-[11px] mt-1">
-                  Not selected
+                <p className="font-mono text-inksoft/40 italic no-print text-[11px] mt-1">
+                  Hidden / Off
                 </p>
               )}
             </div>
@@ -551,187 +568,6 @@ function QuotationPage() {
                     </td>
                   </tr>
                 ))}
-                {/* Interleaved calculations inside the table */}
-                <tr className="border-t border-rule">
-                  <td colSpan={3} className="px-3 py-2 border-r border-rule"></td>
-                  <td
-                    colSpan={2}
-                    className="px-3 py-2 text-right text-inksoft font-semibold whitespace-nowrap"
-                  >
-                    Subtotal
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">{money(totals.subtotal)}</td>
-                  <td className="no-print"></td>
-                </tr>
-
-                <tr className={cn("border-t border-rule", totals.discount === 0 && "print:hidden")}>
-                  <td colSpan={3} className="px-3 py-2 border-r border-rule"></td>
-                  <td colSpan={2} className="px-3 py-2 text-right text-inksoft whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1">
-                      Discount
-                      <NumField
-                        value={discountValue}
-                        onChange={setDiscountValue}
-                        step={0.01}
-                        className="w-14 text-right no-print"
-                      />
-                      <button
-                        onClick={() => setDiscountIsPercent((p: boolean) => !p)}
-                        className="rounded-[4px] bg-ink/5 px-1 text-[10px] text-ink print:bg-transparent no-print"
-                      >
-                        {discountIsPercent ? "%" : "₹"}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right text-destructive">
-                    − {money(totals.discount)}
-                  </td>
-                  <td className="no-print"></td>
-                </tr>
-
-                {/* GST controls/totals */}
-                <>
-                  <tr className="no-print border-t border-rule bg-ink/5/50">
-                    <td colSpan={6} className="px-3 py-2">
-                      <div className="flex flex-wrap items-center justify-end gap-2 text-[10px]">
-                        <span className="text-inksoft font-medium mr-2">GST Config</span>
-                        {GST_SLABS.map((s) => (
-                          <button
-                            key={s}
-                            onClick={() => setGstRate(s)}
-                            className={cn(
-                              "rounded-[4px] px-2 py-1 transition-colors font-medium border",
-                              gstRate === s
-                                ? "bg-accent text-accent-foreground border-accent"
-                                : "bg-white text-inksoft border-rule hover:text-ink shadow-sm cursor-pointer",
-                            )}
-                          >
-                            {s}%
-                          </button>
-                        ))}
-                        <div className="w-[1px] h-4 bg-rule mx-1 hidden sm:block"></div>
-                        <button
-                          onClick={() => setTaxMode(taxMode === "intra" ? "inter" : "intra")}
-                          className="rounded-[4px] border border-ink/15 bg-white px-2 py-1 text-inksoft shadow-sm font-medium hover:text-ink cursor-pointer"
-                        >
-                          {taxMode === "intra" ? "Intra (CGST/SGST)" : "Inter (IGST)"}
-                        </button>
-                        <button
-                          onClick={() => setGstInclusive((b) => !b)}
-                          className={cn(
-                            "rounded-[4px] border px-2 py-1 shadow-sm font-medium cursor-pointer transition-colors",
-                            gstInclusive
-                              ? "bg-accent/10 text-accent border-accent/30"
-                              : "bg-white text-inksoft border-ink/15 hover:text-ink",
-                          )}
-                        >
-                          {gstInclusive ? "Tax Included" : "Tax Excluded"}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="no-print"></td>
-                  </tr>
-                  {taxMode === "intra" ? (
-                    <>
-                      <tr
-                        className={cn("border-t border-rule", totals.cgst === 0 && "print:hidden")}
-                      >
-                        <td colSpan={3} className="px-3 py-2 border-r border-rule"></td>
-                        <td
-                          colSpan={2}
-                          className="px-3 py-2 text-right text-inksoft whitespace-nowrap"
-                        >
-                          CGST @{gstRate / 2}%{" "}
-                          {gstInclusive && <span className="text-[9px]">(Incl.)</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right">{money(totals.cgst)}</td>
-                        <td className="no-print"></td>
-                      </tr>
-                      <tr
-                        className={cn("border-t border-rule", totals.sgst === 0 && "print:hidden")}
-                      >
-                        <td colSpan={3} className="px-3 py-2 border-r border-rule"></td>
-                        <td
-                          colSpan={2}
-                          className="px-3 py-2 text-right text-inksoft whitespace-nowrap"
-                        >
-                          SGST @{gstRate / 2}%{" "}
-                          {gstInclusive && <span className="text-[9px]">(Incl.)</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right">{money(totals.sgst)}</td>
-                        <td className="no-print"></td>
-                      </tr>
-                    </>
-                  ) : (
-                    <tr className={cn("border-t border-rule", totals.igst === 0 && "print:hidden")}>
-                      <td colSpan={3} className="px-3 py-2 border-r border-rule"></td>
-                      <td
-                        colSpan={2}
-                        className="px-3 py-2 text-right text-inksoft whitespace-nowrap"
-                      >
-                        IGST @{gstRate}%{" "}
-                        {gstInclusive && <span className="text-[9px]">(Incl.)</span>}
-                      </td>
-                      <td className="px-3 py-2 text-right">{money(totals.igst)}</td>
-                      <td className="no-print"></td>
-                    </tr>
-                  )}
-                </>
-
-                <tr
-                  className={cn(
-                    "border-t border-rule",
-                    totals.packingCharge === 0 && "print:hidden",
-                  )}
-                >
-                  <td colSpan={3} className="px-3 py-2 border-r border-rule"></td>
-                  <td colSpan={2} className="px-3 py-2 text-right text-inksoft whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1">
-                      Packing & Frwd.
-                      <NumField
-                        className="w-14 text-right no-print"
-                        value={packingCharge}
-                        onChange={setPackingCharge}
-                        step={0.01}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right">{money(totals.packingCharge)}</td>
-                  <td className="no-print"></td>
-                </tr>
-
-                <tr className={cn("border-t border-rule", !roundOffEnabled && "print:hidden")}>
-                  <td colSpan={3} className="px-3 py-2 border-r border-rule"></td>
-                  <td colSpan={2} className="px-3 py-2 text-right text-inksoft whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1">
-                      Round Off
-                      <button
-                        onClick={() => setRoundOffEnabled((r: boolean) => !r)}
-                        className="no-print ml-2 rounded-[4px] bg-ink/5 px-1 text-[10px]"
-                      >
-                        {roundOffEnabled ? "on" : "off"}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {totals.roundOff < 0 ? "−" : "+"} {money(Math.abs(totals.roundOff))}
-                  </td>
-                  <td className="no-print"></td>
-                </tr>
-
-                <tr className="border-t border-rule bg-ink/5 print:bg-transparent">
-                  <td colSpan={3} className="px-3 py-3 border-r border-rule"></td>
-                  <td
-                    colSpan={2}
-                    className="px-3 py-3 text-right font-bold text-sm uppercase tracking-wider whitespace-nowrap"
-                  >
-                    Total Amount
-                  </td>
-                  <td className="px-3 py-3 text-right font-bold text-base">
-                    {money(totals.grandTotal)}
-                  </td>
-                  <td className="no-print"></td>
-                </tr>
               </tbody>
             </table>
           </div>
@@ -742,27 +578,179 @@ function QuotationPage() {
             + Add Line Item
           </button>
 
-          {/* Amount In Words & Terms */}
-          <div className="mt-6 flex flex-col gap-4 font-sans text-xs">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-inksoft">
-                Amount in Words
-              </p>
-              <p className="mt-1 text-sm italic text-ink font-semibold">
-                {amountInWords(totals.grandTotal)}
-              </p>
+          {/* Words, Terms & Totals Summary Layout */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 items-start">
+            {/* Left Column: Amount In Words & Terms */}
+            <div className="flex flex-col gap-4 font-sans text-xs">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-inksoft">
+                  Amount in Words
+                </p>
+                <p className="mt-1 text-sm italic text-ink font-semibold leading-relaxed">
+                  {amountInWords(totals.grandTotal)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-inksoft">
+                  Terms &amp; Conditions
+                </p>
+                <AreaField
+                  value={terms}
+                  onChange={setTerms}
+                  rows={4}
+                  className="mt-1 text-xs text-inksoft"
+                  placeholder="Terms & conditions"
+                />
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-inksoft">
-                Terms &amp; Conditions
-              </p>
-              <AreaField
-                value={terms}
-                onChange={setTerms}
-                rows={4}
-                className="mt-1 text-xs text-inksoft"
-                placeholder="Terms & conditions"
-              />
+
+            {/* Right Column: Totals Summary */}
+            <div className="flex flex-col items-end">
+              <div className="w-full sm:max-w-xs font-mono text-xs">
+                {/* GST Controls (screen only) */}
+                <div className="no-print mb-3 p-2 bg-ink/5 rounded-[6px] border border-rule flex flex-col gap-2 text-[10px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-inksoft font-medium">GST Rate</span>
+                    <div className="flex gap-1">
+                      {GST_SLABS.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setGstRate(s)}
+                          className={cn(
+                            "rounded-[4px] px-2 py-0.5 font-medium border text-[10px] transition-colors",
+                            gstRate === s
+                              ? "bg-accent text-accent-foreground border-accent"
+                              : "bg-white text-inksoft border-rule hover:text-ink cursor-pointer",
+                          )}
+                        >
+                          {s}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-rule">
+                    <button
+                      onClick={() => setTaxMode(taxMode === "intra" ? "inter" : "intra")}
+                      className="rounded-[4px] border border-ink/15 bg-white px-2 py-0.5 text-inksoft font-medium hover:text-ink cursor-pointer text-[10px]"
+                    >
+                      {taxMode === "intra" ? "Intra (CGST/SGST)" : "Inter (IGST)"}
+                    </button>
+                    <button
+                      onClick={() => setGstInclusive((b) => !b)}
+                      className={cn(
+                        "rounded-[4px] border px-2 py-0.5 font-medium cursor-pointer text-[10px] transition-colors",
+                        gstInclusive
+                          ? "bg-accent/10 text-accent border-accent/30"
+                          : "bg-white text-inksoft border-ink/15 hover:text-ink",
+                      )}
+                    >
+                      {gstInclusive ? "Tax Included" : "Tax Excluded"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-[8px] border border-rule overflow-hidden bg-white/40">
+                  <table className="w-full text-right border-collapse">
+                    <tbody className="divide-y divide-rule">
+                      <tr>
+                        <td className="px-3 py-2 text-inksoft font-semibold text-left">Subtotal</td>
+                        <td className="px-3 py-2 font-semibold">{money(totals.subtotal)}</td>
+                      </tr>
+
+                      <tr className={cn(totals.discount === 0 && "print:hidden")}>
+                        <td className="px-3 py-2 text-inksoft text-left">
+                          <div className="flex items-center gap-1">
+                            <span>Discount</span>
+                            <NumField
+                              value={discountValue}
+                              onChange={setDiscountValue}
+                              step={0.01}
+                              className="w-14 text-right no-print"
+                            />
+                            <button
+                              onClick={() => setDiscountIsPercent((p: boolean) => !p)}
+                              className="rounded-[4px] bg-ink/5 px-1 text-[10px] text-ink print:bg-transparent no-print cursor-pointer"
+                            >
+                              {discountIsPercent ? "%" : "₹"}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-destructive whitespace-nowrap">
+                          − {money(totals.discount)}
+                        </td>
+                      </tr>
+
+                      {taxMode === "intra" ? (
+                        <>
+                          <tr className={cn(totals.cgst === 0 && "print:hidden")}>
+                            <td className="px-3 py-2 text-inksoft text-left">
+                              CGST @{gstRate / 2}%{" "}
+                              {gstInclusive && <span className="text-[9px]">(Incl.)</span>}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">{money(totals.cgst)}</td>
+                          </tr>
+                          <tr className={cn(totals.sgst === 0 && "print:hidden")}>
+                            <td className="px-3 py-2 text-inksoft text-left">
+                              SGST @{gstRate / 2}%{" "}
+                              {gstInclusive && <span className="text-[9px]">(Incl.)</span>}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">{money(totals.sgst)}</td>
+                          </tr>
+                        </>
+                      ) : (
+                        <tr className={cn(totals.igst === 0 && "print:hidden")}>
+                          <td className="px-3 py-2 text-inksoft text-left">
+                            IGST @{gstRate}%{" "}
+                            {gstInclusive && <span className="text-[9px]">(Incl.)</span>}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{money(totals.igst)}</td>
+                        </tr>
+                      )}
+
+                      <tr className={cn(totals.packingCharge === 0 && "print:hidden")}>
+                        <td className="px-3 py-2 text-inksoft text-left">
+                          <div className="flex items-center gap-1">
+                            <span>Packing &amp; Frwd.</span>
+                            <NumField
+                              className="w-14 text-right no-print"
+                              value={packingCharge}
+                              onChange={setPackingCharge}
+                              step={0.01}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{money(totals.packingCharge)}</td>
+                      </tr>
+
+                      <tr className={cn(!roundOffEnabled && "print:hidden")}>
+                        <td className="px-3 py-2 text-inksoft text-left">
+                          <div className="flex items-center gap-1">
+                            <span>Round Off</span>
+                            <button
+                              onClick={() => setRoundOffEnabled((r: boolean) => !r)}
+                              className="no-print ml-1 rounded-[4px] bg-ink/5 px-1 text-[10px] cursor-pointer"
+                            >
+                              {roundOffEnabled ? "on" : "off"}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {totals.roundOff < 0 ? "−" : "+"} {money(Math.abs(totals.roundOff))}
+                        </td>
+                      </tr>
+
+                      <tr className="bg-ink/5 print:bg-transparent border-t-2 border-ink">
+                        <td className="px-3 py-2.5 font-bold text-sm uppercase tracking-wider text-ink text-left">
+                          Total Amount
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-base text-ink whitespace-nowrap">
+                          {money(totals.grandTotal)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -816,27 +804,42 @@ function QuotationPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="grid size-20 shrink-0 place-items-center rounded-[8px] bg-white p-1 outline-1 -outline-offset-1 outline-black/5">
-                {upi ? (
-                  <QRCodeCanvas
-                    value={upi}
-                    size={72}
-                    level="M"
-                    bgColor="#ffffff"
-                    fgColor="#182236"
+            <div className="flex flex-col items-center justify-center text-center">
+              <span className="font-extrabold text-ink text-[11px] uppercase tracking-wider block mb-1">
+                Scan &amp; Pay
+              </span>
+              <div className="grid size-28 shrink-0 place-items-center rounded-[8px] bg-white p-2 border border-rule shadow-sm">
+                {qrMode === "image" ? (
+                  <img
+                    src="/upi-qr-code.png"
+                    alt="Scan to Pay QR Code"
+                    className="size-full object-contain"
                   />
                 ) : (
-                  <span className="text-center font-mono text-[9px] uppercase tracking-[0.12em] text-inksoft/60">
-                    Add UPI
-                  </span>
+                  <QRCodeCanvas
+                    value={upi || IDFC_MERCHANT_UPI_BASE}
+                    size={96}
+                    level="M"
+                    marginSize={1}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                  />
                 )}
               </div>
-              <p className="font-mono text-[10px] leading-relaxed text-inksoft">
-                Scan to pay
-                <br />
-                {money(totals.grandTotal)}
-              </p>
+              <div className="font-mono text-[10px] leading-tight text-inksoft mt-1.5 text-center">
+                <p className="font-extrabold text-ink text-xs">
+                  {money(totals.grandTotal)}
+                </p>
+                <div className="no-print mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setQrMode((m) => (m === "live" ? "image" : "live"))}
+                    className="rounded bg-ink/5 hover:bg-ink/10 px-1.5 py-0.5 text-[8px] font-semibold border border-rule text-ink cursor-pointer"
+                  >
+                    {qrMode === "live" ? "Static Card QR" : "Live Amount QR"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
