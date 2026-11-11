@@ -255,8 +255,8 @@ function InvoicePage() {
       <main className="px-4 py-8 print:p-0 print:m-0">
         <article className="sheet mx-auto w-full max-w-[794px] min-h-[1123px] rounded-[10px] bg-paper p-8 shadow-[0_1px_0_rgba(0,0,0,0.04),0_28px_50px_-24px_rgba(24,34,54,0.45)] ring-1 ring-black/5 print:ring-0 print:border-none print:shadow-none print:p-0 print:m-0 sm:p-10">
           {/* Masthead */}
-          <div className="flex items-start justify-between gap-6 border-b-2 border-ink pb-5">
-            <div className="flex items-center gap-3">
+          <div className="flex items-start justify-between gap-6 border-b-2 border-ink pb-5 print:pb-4">
+            <div className="flex items-start gap-3">
               <div className="size-16 shrink-0 flex items-center justify-center overflow-hidden">
                 <img
                   src="/logo-bg-removed.png"
@@ -272,7 +272,7 @@ function InvoicePage() {
                   className="text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl"
                   invalid={errors.length > 0 && !seller.name.trim()}
                 />
-                <div className="mt-1 flex flex-wrap font-mono text-[11px] text-inksoft">
+                <div className="mt-1 font-mono text-[11px] text-inksoft leading-snug">
                   <Field
                     value={seller.street}
                     onChange={setSellerField("street")}
@@ -428,15 +428,15 @@ function InvoicePage() {
                   onChange={setSellerField("street")}
                   placeholder="Street"
                 />
-                <div className="flex">
+                <div className="flex flex-wrap items-center">
                   <Field value={seller.city} onChange={setSellerField("city")} placeholder="City" />
-                  <span className="mr-1">,</span>
+                  <span className={cn("mr-1", (!seller.city || !seller.state) && "print:hidden")}>,</span>
                   <Field
                     value={seller.state}
                     onChange={setSellerField("state")}
                     placeholder="State"
                   />
-                  <span className="mr-1"> -</span>
+                  <span className={cn("mx-1", !seller.pin && "print:hidden")}>-</span>
                   <Field value={seller.pin} onChange={setSellerField("pin")} placeholder="PIN" />
                 </div>
               </div>
@@ -494,15 +494,15 @@ function InvoicePage() {
                   onChange={setBuyerField("street")}
                   placeholder="Street"
                 />
-                <div className="flex">
+                <div className="flex flex-wrap items-center">
                   <Field value={buyer.city} onChange={setBuyerField("city")} placeholder="City" />
-                  <span className="mr-1">,</span>
+                  <span className={cn("mr-1", (!buyer.city || !buyer.state) && "print:hidden")}>,</span>
                   <Field
                     value={buyer.state}
                     onChange={setBuyerField("state")}
                     placeholder="State"
                   />
-                  <span className="mr-1"> -</span>
+                  <span className={cn("mx-1", !buyer.pin && "print:hidden")}>-</span>
                   <Field value={buyer.pin} onChange={setBuyerField("pin")} placeholder="PIN" />
                 </div>
                 <Field

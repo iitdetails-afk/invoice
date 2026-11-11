@@ -26,45 +26,75 @@ export function Field({
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (type === "text" && ref.current) {
-      ref.current.style.height = "0px";
-      const scrollHeight = ref.current.scrollHeight;
-      ref.current.style.height = `${scrollHeight}px`;
-    }
+    const adjust = () => {
+      if (type === "text" && ref.current) {
+        ref.current.style.height = "auto";
+        const scrollHeight = ref.current.scrollHeight;
+        ref.current.style.height = `${scrollHeight}px`;
+      }
+    };
+    adjust();
+    window.addEventListener("resize", adjust);
+    return () => window.removeEventListener("resize", adjust);
   }, [value, type]);
 
   if (type === "text") {
     return (
-      <textarea
-        ref={ref}
-        rows={1}
+      <>
+        <textarea
+          ref={ref}
+          rows={1}
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(
+            base,
+            "resize-none overflow-hidden block print:hidden",
+            align === "right" && "text-right",
+            invalid && "bg-destructive/8 ring-1 ring-destructive/40",
+            className,
+          )}
+        />
+        <div
+          className={cn(
+            base,
+            "hidden print:block whitespace-pre-wrap break-words",
+            align === "right" && "text-right",
+            className,
+          )}
+        >
+          {value || ""}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <input
+        type={type}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           base,
-          "resize-none overflow-hidden block",
+          "print:hidden",
           align === "right" && "text-right",
           invalid && "bg-destructive/8 ring-1 ring-destructive/40",
           className,
         )}
       />
-    );
-  }
-
-  return (
-    <input
-      type={type}
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        base,
-        align === "right" && "text-right",
-        invalid && "bg-destructive/8 ring-1 ring-destructive/40",
-        className,
-      )}
-    />
+      <div
+        className={cn(
+          base,
+          "hidden print:block whitespace-pre-wrap break-words",
+          align === "right" && "text-right",
+          className,
+        )}
+      >
+        {value || ""}
+      </div>
+    </>
   );
 }
 
@@ -78,19 +108,24 @@ interface NumFieldProps {
 
 export function NumField({ value, onChange, className, max, step = 1 }: NumFieldProps) {
   return (
-    <input
-      type="number"
-      min={0}
-      max={max}
-      step={step}
-      value={Number.isFinite(value) ? value : 0}
-      onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
-      className={cn(
-        base,
-        "text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none",
-        className,
-      )}
-    />
+    <>
+      <input
+        type="number"
+        min={0}
+        max={max}
+        step={step}
+        value={Number.isFinite(value) ? value : 0}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
+        className={cn(
+          base,
+          "text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none print:hidden",
+          className,
+        )}
+      />
+      <div className={cn(base, "hidden print:block text-right", className)}>
+        {Number.isFinite(value) ? value : 0}
+      </div>
+    </>
   );
 }
 
@@ -110,22 +145,38 @@ export function AreaField({
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (ref.current) {
-      ref.current.style.height = "0px";
-      const scrollHeight = ref.current.scrollHeight;
-      ref.current.style.height = `${scrollHeight}px`;
-    }
+    const adjust = () => {
+      if (ref.current) {
+        ref.current.style.height = "auto";
+        const scrollHeight = ref.current.scrollHeight;
+        ref.current.style.height = `${scrollHeight}px`;
+      }
+    };
+    adjust();
+    window.addEventListener("resize", adjust);
+    return () => window.removeEventListener("resize", adjust);
   }, [value]);
 
   return (
-    <textarea
-      ref={ref}
-      rows={rows}
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(base, "resize-none overflow-hidden leading-relaxed", className)}
-    />
+    <>
+      <textarea
+        ref={ref}
+        rows={rows}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(base, "resize-none overflow-hidden leading-relaxed print:hidden", className)}
+      />
+      <div
+        className={cn(
+          base,
+          "hidden print:block whitespace-pre-wrap break-words leading-relaxed",
+          className,
+        )}
+      >
+        {value || ""}
+      </div>
+    </>
   );
 }
 
